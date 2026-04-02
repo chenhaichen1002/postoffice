@@ -2,56 +2,67 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>郵便局データ取得実証</title>
+    <title>郵便局データ取得実証（ブラウザ偽装版）</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; line-height: 1.6; }
+        #result { white-space: pre-wrap; background: #eee; padding: 10px; border-radius: 5px; margin-top: 20px; }
+        .loading { color: blue; }
+    </style>
 </head>
 <body>
-    <h1>郵便局データ取得実証（Consoleを確認）</h1>
-    <p>検索キーワード: <input type="text" id="keyword" value="京都郵便局"> 
-    <button onclick="fetchData()">データ取得実行</button></p>
+    <h2>郵便局HPデータ取得シミュレーター</h2>
+    <input type="text" id="keyword" value="京都郵便局">
+    <button onclick="runVerification()">データ取得を実行</button>
+
+    <div id="status"></div>
+    <div id="result">ここに抽出したJSONデータが表示されます</div>
 
     <script>
-        async function fetchData() {
+        async function runVerification() {
             const keyword = document.getElementById('keyword').value;
+            const status = document.getElementById('status');
+            const resultDiv = document.getElementById('result');
+
+            status.innerHTML = '<span class="loading">ブラウザを偽装してリクエスト中...</span>';
+            
             // 日本郵便の検索URL
             const targetUrl = `https://www.post.japanpost.jp/cgi-shiten_search/shiten.php?name=${encodeURIComponent(keyword)}`;
             
-            // CORS回避のためのプロキシ（実証用）
-            const proxyUrl = 'https://api.allorigins.win/get?url=';
-
-            console.log(`${keyword} のデータを取得中...`);
+            // alloriginsプロキシを使用して、ブラウザからのリクエストをエミュレート
+            const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
 
             try {
-                const response = await fetch(proxyUrl + encodeURIComponent(targetUrl));
+                const response = await fetch(proxyUrl);
                 const json = await response.json();
                 
-                // HTML文字列をパースするためのDOMParser
+                // HTMLとして解析
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(json.contents, 'text/html');
 
-                const results = [];
-                // 提供されたHTML構造（table.data.full）からデータを抽出
+                const extractedData = [];
+                // 提供されたHTMLのクラス名「table.data.full」で抽出
                 const rows = doc.querySelectorAll('table.data.full tbody tr');
 
                 rows.forEach(row => {
-                    const nameEl = row.querySelector('td:nth-child(1) a');
-                    const addressEl = row.querySelector('td:nth-child(2) small');
-
-                    if (nameEl && addressEl) {
-                        results.push({
-                            name: nameEl.textContent.trim(),
-                            address: addressEl.textContent.trim(),
-                            url: 'https://www.post.japanpost.jp/cgi-shiten_search/' + nameEl.getAttribute('href')
-                        });
+                    const name = row.querySelector('td:nth-child(1) a')?.textContent.trim();
+                    const address = row.querySelector('td:nth-child(2) small')?.textContent.trim();
+                    if (name && address) {
+                        extractedData.push({ name, address });
                     }
                 });
 
-                // --- データのみをコンソールに出力 ---
-                console.log("取得完了。以下が抽出データです：");
-                console.table(results); // テーブル形式で見やすく表示
-                console.log("Raw JSON:", JSON.stringify(results, null, 2));
+                if (extractedData.length > 0) {
+                    status.innerHTML = '<span style="color:green;">✅ 取得成功</span>';
+                    resultDiv.textContent = JSON.stringify(extractedData, null, 2);
+                    console.log("実証データ:", extractedData);
+                } else {
+                    status.innerHTML = '<span style="color:red;">⚠️ データが見つかりませんでした。HTML構造が変わったか、ブロックされています。</span>';
+                    resultDiv.textContent = "取得失敗：HTMLの中身を確認してください";
+                }
 
             } catch (error) {
-                console.error("エラーが発生しました:", error);
+                status.innerHTML = '<span style="color:red;">❌ 通信エラーが発生しました。</span>';
+                console.error(error);
             }
         }
     </script>
