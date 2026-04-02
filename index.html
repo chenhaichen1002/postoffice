@@ -2,100 +2,87 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>郵便局データ抽出（高度な偽装版）</title>
+    <title>郵便局詳細住所スキャナー</title>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f4f7f6; padding: 40px; }
-        .main-card { background: #fff; max-width: 800px; margin: auto; padding: 30px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
-        h1 { color: #d7000f; font-size: 24px; margin-bottom: 20px; border-left: 6px solid #d7000f; padding-left: 15px; }
-        .input-group { display: flex; gap: 10px; margin-bottom: 25px; }
-        input { flex: 1; padding: 15px; border: 2px solid #e1e4e8; border-radius: 8px; font-size: 16px; transition: 0.3s; }
-        input:focus { border-color: #d7000f; outline: none; }
-        button { background: #d7000f; color: white; border: none; padding: 15px 30px; border-radius: 8px; font-weight: bold; cursor: pointer; transition: 0.3s; }
-        button:hover { background: #b0000d; transform: translateY(-1px); }
-        #console { background: #1a1a1b; color: #39ff14; padding: 20px; border-radius: 8px; font-family: 'Courier New', Courier, monospace; min-height: 150px; overflow-x: auto; white-space: pre-wrap; font-size: 14px; }
-        .status-bar { margin-top: 10px; font-size: 14px; color: #586069; }
+        body { font-family: sans-serif; background: #f8f9fa; padding: 20px; }
+        .box { background: #fff; max-width: 700px; margin: auto; padding: 25px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        h1 { color: #e60012; font-size: 20px; border-bottom: 2px solid #e60012; padding-bottom: 5px; }
+        .input-group { display: flex; margin: 20px 0; }
+        input { flex: 1; padding: 12px; border: 2px solid #ddd; border-radius: 4px 0 0 4px; font-size: 16px; }
+        button { background: #e60012; color: #fff; border: none; padding: 0 20px; border-radius: 0 4px 4px 0; cursor: pointer; font-weight: bold; }
+        #status { padding: 10px; margin-top: 10px; font-size: 14px; border-radius: 4px; display: none; }
+        .err { background: #ffdce0; color: #af1928; }
+        .load { background: #e2f3ff; color: #0066cc; }
+        pre { background: #2d2d2d; color: #ccc; padding: 15px; border-radius: 6px; overflow-x: auto; font-size: 13px; min-height: 50px; }
     </style>
 </head>
 <body>
 
-<div class="main-card">
-    <h1>郵便局詳細データ・スキャナー</h1>
-    
+<div class="box">
+    <h1>郵便局公式住所 抽出エンジン</h1>
     <div class="input-group">
-        <input type="text" id="searchKeyword" placeholder="局名（例：都島郵便局、大阪北郵便局）" value="都島郵便局">
-        <button onclick="stealthFetch()">スキャン開始</button>
+        <input type="text" id="kw" value="都島郵便局">
+        <button onclick="startFetch()">抽出実行</button>
     </div>
-
-    <div class="status-bar" id="statusBar">Ready.</div>
-    <pre id="console">// 抽出されたJSONデータがここに表示されます</pre>
+    <div id="status"></div>
+    <pre id="res">[ 結果 ]</pre>
 </div>
 
 <script>
-    async function stealthFetch() {
-        const keyword = document.getElementById('searchKeyword').value;
-        const consoleLog = document.getElementById('console');
-        const statusBar = document.getElementById('statusBar');
+async function startFetch() {
+    const kw = document.getElementById('kw').value;
+    const status = document.getElementById('status');
+    const resArea = document.getElementById('res');
 
-        if (!keyword) return;
+    status.style.display = "block";
+    status.className = "load";
+    status.innerText = "⏳ サーバーに接続中... (1/2)";
+    resArea.innerText = "処理中...";
 
-        statusBar.innerText = "偽装ヘッダーを構築中...";
-        consoleLog.innerText = "Connecting to Japan Post server via stealth proxy...";
+    const target = `https://www.post.japanpost.jp/cgi-shiten_search/shiten.php?name=${encodeURIComponent(kw)}`;
+    
+    // 偽装プロキシURL（予備を含めて試行）
+    const proxies = [
+        `https://api.allorigins.win/get?url=${encodeURIComponent(target)}`,
+        `https://corsproxy.io/?${encodeURIComponent(target)}`
+    ];
 
-        // 検索用URL
-        const targetUrl = `https://www.post.japanpost.jp/cgi-shiten_search/shiten.php?name=${encodeURIComponent(keyword)}`;
-        
-        /**
-         * 偽装リクエストの構築
-         * headersパラメーターを介して、ブラウザからのアクセスであることを主張します
-         */
-        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}&_=${Date.now()}`;
-
+    for (const url of proxies) {
         try {
-            const response = await fetch(proxyUrl);
-            const data = await response.json();
+            const resp = await fetch(url);
+            if (!resp.ok) throw new Error();
             
-            // プロキシのエラーチェック
-            if (!data || !data.contents) {
-                throw new Error("プロキシサーバーがブロックされました。時間を置いて試してください。");
-            }
+            const data = await resp.json();
+            const html = data.contents || data; // プロキシによって構造が違うため調整
 
             const parser = new DOMParser();
-            const doc = parser.parseFromString(data.contents, 'text/html');
-            
-            const results = [];
-            // 提供されたHTMLの正確なテーブル構造をターゲットにする
-            const tableRows = doc.querySelectorAll('table.data.full tbody tr');
+            const doc = parser.parseFromString(html, 'text/html');
+            const rows = doc.querySelectorAll('table.data.full tbody tr');
+            const list = [];
 
-            tableRows.forEach(row => {
-                const nameEl = row.querySelector('td:nth-child(1) a');
-                const addressEl = row.querySelector('td:nth-child(2) small');
-
-                if (nameEl && addressEl) {
-                    results.push({
-                        "name": nameEl.textContent.trim(),
-                        "address": addressSmallCleansing(addressEl.textContent.trim())
-                    });
-                }
+            rows.forEach(r => {
+                const name = r.querySelector('td:nth-child(1) a')?.textContent.trim();
+                const addr = r.querySelector('td:nth-child(2) small')?.textContent.trim();
+                if (name && addr) list.push({ name, addr });
             });
 
-            if (results.length > 0) {
-                statusBar.innerText = `成功：${results.length}件のデータをスキャンしました。`;
-                consoleLog.innerText = JSON.stringify(results, null, 4);
-            } else {
-                statusBar.innerText = "警告：データが空です。検索条件を変えてください。";
-                consoleLog.innerText = "// 結果がありませんでした。局名が正しいか確認してください。";
+            if (list.length > 0) {
+                status.innerText = `✅ ${list.length}件 取得完了`;
+                status.style.background = "#e6ffed";
+                status.style.color = "#155724";
+                resArea.innerText = JSON.stringify(list, null, 2);
+                return; // 成功したので終了
             }
-
-        } catch (error) {
-            statusBar.innerText = "エラー発生。";
-            consoleLog.innerText = `[ERROR] ${error.message}\n\n※プロキシの過負荷、または公式サイトのガードが強まっています。`;
+        } catch (e) {
+            status.innerText = "⚠️ 接続を切り替えています...";
+            continue;
         }
     }
 
-    // 住所のクリーニング（余計な改行や空白を除去）
-    function addressSmallCleansing(str) {
-        return str.replace(/\s+/g, ' ').trim();
-    }
+    status.className = "err";
+    status.innerText = "❌ 取得失敗。公式サイトのガードが固いか、通信制限中です。";
+    resArea.innerText = "Failed to fetch. しばらく時間を置いてから再度お試しください。";
+}
 </script>
 
 </body>
