@@ -2,57 +2,89 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>郵便局公式データ抽出実証</title>
+    <title>郵便局詳細住所抽出ツール</title>
+    <style>
+        body { font-family: sans-serif; margin: 30px; line-height: 1.6; background: #f9f9f9; }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); max-width: 800px; margin: auto; }
+        h1 { color: #e60012; border-left: 5px solid #e60012; padding-left: 15px; font-size: 20px; }
+        .search-box { display: flex; gap: 10px; margin: 20px 0; }
+        input { flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 4px; }
+        button { padding: 10px 20px; background: #e60012; color: white; border: none; border-radius: 4px; cursor: pointer; cursor: pointer; font-weight: bold; }
+        button:hover { background: #c50010; }
+        #log { font-size: 12px; color: #666; margin-bottom: 10px; }
+        pre { background: #272822; color: #f8f8f2; padding: 15px; border-radius: 4px; overflow-x: auto; font-size: 14px; }
+    </style>
 </head>
 <body>
-    <script>
-        async function getOfficialData(keyword) {
-            // 日本郵便の公式検索URL
-            const targetUrl = `https://www.post.japanpost.jp/cgi-shiten_search/shiten.php?name=${encodeURIComponent(keyword)}`;
-            // CORS回避プロキシ
-            const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
 
-            try {
-                const response = await fetch(proxyUrl);
-                const json = await response.json();
-                
-                const parser = new DOMParser();
-                const doc = parser.parseFromString(json.contents, 'text/html');
-                
-                const finalData = [];
+<div class="card">
+    <h1>郵便局 公式データ抽出</h1>
+    <p>名称を入力すると、公式検索結果から正確な番地を含む住所をJSONで取得します。</p>
 
-                // 公式HPのテーブル構造（table.data.full）を正確にスキャン
-                const rows = doc.querySelectorAll('table.data.full tbody tr');
+    <div class="search-box">
+        <input type="text" id="targetName" placeholder="郵便局名を入力（例：大阪北、都島）" value="大阪北">
+        <button onclick="fetchPostOfficeData()">データ抽出実行</button>
+    </div>
 
-                rows.forEach(row => {
-                    const nameNode = row.querySelector('td:nth-child(1) a');
-                    const addressNode = row.querySelector('td:nth-child(2) small');
+    <div id="log">待機中...</div>
+    <pre id="output">[ JSONデータがここに表示されます ]</pre>
+</div>
 
-                    if (nameNode && addressNode) {
-                        finalData.push({
-                            "name": nameNode.textContent.trim(),
-                            "address": addressNode.textContent.trim() // ここで「高倉町1-6-3」を取得
-                        });
-                    }
-                });
+<script>
+    async function fetchPostOfficeData() {
+        const name = document.getElementById('targetName').value;
+        const log = document.getElementById('log');
+        const output = document.getElementById('output');
 
-                // --- データのみを返す ---
-                if (finalData.length > 0) {
-                    console.log("抽出成功（公式データ）:");
-                    console.log(JSON.stringify(finalData, null, 2));
-                    alert("データ抽出完了。コンソールを確認してください。");
-                } else {
-                    console.log("該当するデータが見つかりませんでした。");
+        if (!name) return alert("局名を入力してください");
+
+        log.innerText = `Searching: 「${name}」の検索結果を取得中...`;
+        
+        // 日本郵便の検索エンジンへリクエスト（ご提示いただいたHTMLのaction先を元に構成）
+        const baseUrl = "https://www.post.japanpost.jp/cgi-shiten_search/shiten.php";
+        const targetUrl = `${baseUrl}?name=${encodeURIComponent(name)}`;
+        
+        // CORS回避用プロキシ
+        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
+
+        try {
+            const response = await fetch(proxyUrl);
+            const data = await response.json();
+            const html = data.contents;
+
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            
+            const results = [];
+            // 検索結果のテーブル行を取得
+            const rows = doc.querySelectorAll('table.data.full tbody tr');
+
+            rows.forEach(row => {
+                const nameLink = row.querySelector('td:nth-child(1) a');
+                const addressSmall = row.querySelector('td:nth-child(2) small');
+
+                if (nameLink && addressSmall) {
+                    results.push({
+                        "name": nameLink.textContent.trim(),
+                        "address": addressSmall.textContent.trim()
+                    });
                 }
+            });
 
-            } catch (error) {
-                console.error("通信または解析エラー:", error);
+            if (results.length > 0) {
+                log.innerText = `成功：${results.length} 件見つかりました。`;
+                output.textContent = JSON.stringify(results, null, 4);
+            } else {
+                log.innerText = "該当する郵便局が見つかりませんでした。";
+                output.textContent = "[]";
             }
-        }
-    </script>
 
-    <h2>日本郵便 公式HPデータ抽出検証</h2>
-    <p>キーワード：<strong>都島郵便局</strong></p>
-    <button onclick="getOfficialData('都島郵便局')">公式データを抽出してJSON表示</button>
+        } catch (e) {
+            log.innerText = "エラーが発生しました。";
+            output.textContent = e.message;
+        }
+    }
+</script>
+
 </body>
 </html>
