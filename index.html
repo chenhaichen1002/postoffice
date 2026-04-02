@@ -2,69 +2,57 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>郵便局データ取得実証（ブラウザ偽装版）</title>
-    <style>
-        body { font-family: sans-serif; padding: 20px; line-height: 1.6; }
-        #result { white-space: pre-wrap; background: #eee; padding: 10px; border-radius: 5px; margin-top: 20px; }
-        .loading { color: blue; }
-    </style>
+    <title>郵便局公式データ抽出実証</title>
 </head>
 <body>
-    <h2>郵便局HPデータ取得シミュレーター</h2>
-    <input type="text" id="keyword" value="京都郵便局">
-    <button onclick="runVerification()">データ取得を実行</button>
-
-    <div id="status"></div>
-    <div id="result">ここに抽出したJSONデータが表示されます</div>
-
     <script>
-        async function runVerification() {
-            const keyword = document.getElementById('keyword').value;
-            const status = document.getElementById('status');
-            const resultDiv = document.getElementById('result');
-
-            status.innerHTML = '<span class="loading">ブラウザを偽装してリクエスト中...</span>';
-            
-            // 日本郵便の検索URL
+        async function getOfficialData(keyword) {
+            // 日本郵便の公式検索URL
             const targetUrl = `https://www.post.japanpost.jp/cgi-shiten_search/shiten.php?name=${encodeURIComponent(keyword)}`;
-            
-            // alloriginsプロキシを使用して、ブラウザからのリクエストをエミュレート
+            // CORS回避プロキシ
             const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
 
             try {
                 const response = await fetch(proxyUrl);
                 const json = await response.json();
                 
-                // HTMLとして解析
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(json.contents, 'text/html');
+                
+                const finalData = [];
 
-                const extractedData = [];
-                // 提供されたHTMLのクラス名「table.data.full」で抽出
+                // 公式HPのテーブル構造（table.data.full）を正確にスキャン
                 const rows = doc.querySelectorAll('table.data.full tbody tr');
 
                 rows.forEach(row => {
-                    const name = row.querySelector('td:nth-child(1) a')?.textContent.trim();
-                    const address = row.querySelector('td:nth-child(2) small')?.textContent.trim();
-                    if (name && address) {
-                        extractedData.push({ name, address });
+                    const nameNode = row.querySelector('td:nth-child(1) a');
+                    const addressNode = row.querySelector('td:nth-child(2) small');
+
+                    if (nameNode && addressNode) {
+                        finalData.push({
+                            "name": nameNode.textContent.trim(),
+                            "address": addressNode.textContent.trim() // ここで「高倉町1-6-3」を取得
+                        });
                     }
                 });
 
-                if (extractedData.length > 0) {
-                    status.innerHTML = '<span style="color:green;">✅ 取得成功</span>';
-                    resultDiv.textContent = JSON.stringify(extractedData, null, 2);
-                    console.log("実証データ:", extractedData);
+                // --- データのみを返す ---
+                if (finalData.length > 0) {
+                    console.log("抽出成功（公式データ）:");
+                    console.log(JSON.stringify(finalData, null, 2));
+                    alert("データ抽出完了。コンソールを確認してください。");
                 } else {
-                    status.innerHTML = '<span style="color:red;">⚠️ データが見つかりませんでした。HTML構造が変わったか、ブロックされています。</span>';
-                    resultDiv.textContent = "取得失敗：HTMLの中身を確認してください";
+                    console.log("該当するデータが見つかりませんでした。");
                 }
 
             } catch (error) {
-                status.innerHTML = '<span style="color:red;">❌ 通信エラーが発生しました。</span>';
-                console.error(error);
+                console.error("通信または解析エラー:", error);
             }
         }
     </script>
+
+    <h2>日本郵便 公式HPデータ抽出検証</h2>
+    <p>キーワード：<strong>都島郵便局</strong></p>
+    <button onclick="getOfficialData('都島郵便局')">公式データを抽出してJSON表示</button>
 </body>
 </html>
