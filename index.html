@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>郵便局データ取得実証</title>
+</head>
+<body>
+    <h1>郵便局データ取得実証（Consoleを確認）</h1>
+    <p>検索キーワード: <input type="text" id="keyword" value="京都郵便局"> 
+    <button onclick="fetchData()">データ取得実行</button></p>
+
+    <script>
+        async function fetchData() {
+            const keyword = document.getElementById('keyword').value;
+            // 日本郵便の検索URL
+            const targetUrl = `https://www.post.japanpost.jp/cgi-shiten_search/shiten.php?name=${encodeURIComponent(keyword)}`;
+            
+            // CORS回避のためのプロキシ（実証用）
+            const proxyUrl = 'https://api.allorigins.win/get?url=';
+
+            console.log(`${keyword} のデータを取得中...`);
+
+            try {
+                const response = await fetch(proxyUrl + encodeURIComponent(targetUrl));
+                const json = await response.json();
+                
+                // HTML文字列をパースするためのDOMParser
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(json.contents, 'text/html');
+
+                const results = [];
+                // 提供されたHTML構造（table.data.full）からデータを抽出
+                const rows = doc.querySelectorAll('table.data.full tbody tr');
+
+                rows.forEach(row => {
+                    const nameEl = row.querySelector('td:nth-child(1) a');
+                    const addressEl = row.querySelector('td:nth-child(2) small');
+
+                    if (nameEl && addressEl) {
+                        results.push({
+                            name: nameEl.textContent.trim(),
+                            address: addressEl.textContent.trim(),
+                            url: 'https://www.post.japanpost.jp/cgi-shiten_search/' + nameEl.getAttribute('href')
+                        });
+                    }
+                });
+
+                // --- データのみをコンソールに出力 ---
+                console.log("取得完了。以下が抽出データです：");
+                console.table(results); // テーブル形式で見やすく表示
+                console.log("Raw JSON:", JSON.stringify(results, null, 2));
+
+            } catch (error) {
+                console.error("エラーが発生しました:", error);
+            }
+        }
+    </script>
+</body>
+</html>
